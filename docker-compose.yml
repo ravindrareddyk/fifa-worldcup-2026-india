@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  wc-india-hub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      - FOOTBALL_API_KEY=${FOOTBALL_API_KEY:-}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Mount for live code reload during development (optional)
+      - .:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
