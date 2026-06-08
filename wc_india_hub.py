@@ -16,6 +16,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
+from pathlib import Path
 
 # Internal modules
 from utils.data_loader import load_fixtures, load_team_strength
@@ -82,13 +83,23 @@ fixtures = load_fixtures()
 team_df = load_team_strength()
 
 # -----------------------------------------------------------------------------
-# Session State for Monetization Features (Phase 2)
+# Session State + Persistence for Monetization Features (Phase 2)
 # -----------------------------------------------------------------------------
-if "subscribers" not in st.session_state:
-    st.session_state.subscribers = []
+DATA_DIR = Path("data")
+DATA_DIR.mkdir(exist_ok=True)
 
-if "leaderboard" not in st.session_state:
-    st.session_state.leaderboard = [
+LEADERBOARD_FILE = DATA_DIR / "leaderboard.csv"
+SUBSCRIBERS_FILE = DATA_DIR / "subscribers.csv"
+
+def load_leaderboard():
+    if LEADERBOARD_FILE.exists():
+        try:
+            df = pd.read_csv(LEADERBOARD_FILE)
+            return df.to_dict("records")
+        except Exception:
+            pass
+    # Default demo data
+    return [
         {"user": "Rohit_93", "points": 1240, "prediction": "France 2-1"},
         {"user": "PriyaWC", "points": 1185, "prediction": "Argentina 1-1"},
         {"user": "Amit_11", "points": 1090, "prediction": "Brazil 3-0"},
@@ -96,8 +107,40 @@ if "leaderboard" not in st.session_state:
         {"user": "Vikram88", "points": 980, "prediction": "Spain 2-0"},
     ]
 
+def save_leaderboard(data):
+    pd.DataFrame(data).to_csv(LEADERBOARD_FILE, index=False)
+
+def load_subscribers():
+    if SUBSCRIBERS_FILE.exists():
+        try:
+            df = pd.read_csv(SUBSCRIBERS_FILE)
+            return df["email"].tolist()
+        except Exception:
+            pass
+    return []
+
+def save_subscribers(emails):
+    pd.DataFrame({"email": emails}).to_csv(SUBSCRIBERS_FILE, index=False)
+
+if "subscribers" not in st.session_state:
+    st.session_state.subscribers = load_subscribers()
+
+if "leaderboard" not in st.session_state:
+    st.session_state.leaderboard = load_leaderboard()
+
 if "my_predictions" not in st.session_state:
     st.session_state.my_predictions = []
+
+if "claimed_rewards" not in st.session_state:
+    st.session_state.claimed_rewards = []
+
+if "last_ml_prediction" not in st.session_state:
+    st.session_state.last_ml_prediction = None
+
+# Auto-save helpers (call after mutations)
+def persist_montization_data():
+    save_leaderboard(st.session_state.leaderboard)
+    save_subscribers(st.session_state.subscribers)
 
 # -----------------------------------------------------------------------------
 # Main Tabs
@@ -240,6 +283,14 @@ with tabs[2]:
         with st.spinner("Running model..."):
             pred = get_match_prediction(team1, team2, is_knockout=is_knockout)
 
+            # Capture for Monetize tab contest integration (Phase 2)
+            st.session_state.last_ml_prediction = {
+                "team1": team1,
+                "team2": team2,
+                "recommended_score": pred["recommended_score"],
+                "win_prob": pred["team1_win_prob"],
+            }
+
         st.divider()
 
         # Big probability display
@@ -282,7 +333,7 @@ with tabs[2]:
         st.success(f"Model retrained! Validation accuracy ≈ {acc}")
 
 # =============================================================================
-# TAB 3: Support & Monetize (Phase 2)
+# TAB 3: Support & Monetize (Phase 2 - Enhanced)
 # =============================================================================
 with tabs[3]:  # Monetize tab
     st.subheader("💰 Support the Hub & Earn Rewards")
@@ -302,44 +353,102 @@ with tabs[3]:  # Monetize tab
 
     st.divider()
 
-    # --- Affiliate / Partner Cards ---
+    # --- Configurable Affiliate Links (Phase 2 improvement) ---
+    with st.expander("🔗 Configure Your Affiliate / Referral Links (Demo)", expanded=False):
+        st.caption("Edit these in a real deployment or via st.secrets / .env")
+
+        default_links = {
+            "amazon": "https://amzn.to/your-affiliate-tag",
+            "dream11": "https://dream11.com/your-ref-link",
+            "zee5": "https://zee5.com",
+        }
+
+        if "affiliate_links" not in st.session_state:
+            st.session_state.affiliate_links = default_links.copy()
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.session_state.affiliate_links["amazon"] = st.text_input(
+                "Amazon Affiliate Link", value=st.session_state.affiliate_links["amazon"], key="aff_amzn"
+            )
+            st.session_state.affiliate_links["dream11"] = st.text_input(
+                "Fantasy Platform Link", value=st.session_state.affiliate_links["dream11"], key="aff_dream"
+            )
+        with col_b:
+            st.session_state.affiliate_links["zee5"] = st.text_input(
+                "Streaming Partner Link", value=st.session_state.affiliate_links["zee5"], key="aff_zee"
+            )
+
+        if st.button("Reset to Default Links"):
+            st.session_state.affiliate_links = default_links.copy()
+            st.rerun()
+
+    # --- Affiliate / Partner Cards (now use configurable links) ---
     st.markdown("### 🛒 Partner Offers & Ways to Support")
+
+    links = st.session_state.get("affiliate_links", {})
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
         st.markdown("**🛍️ Shop Official Fan Gear**")
         st.markdown("Jerseys, flags, scarves & more")
-        st.markdown("[Amazon India →](https://amzn.to/your-affiliate-tag)")
+        st.markdown(f"[Amazon India →]({links.get('amazon', '#')})")
         if st.button("Browse Merch", key="merch"):
             st.toast("🔗 Opening Amazon affiliate link (demo)")
 
     with col2:
         st.markdown("**🎯 Fantasy Leagues & Contests**")
         st.markdown("Play & win big with your WC knowledge")
-        st.markdown("[Dream11 / MyTeam11 →](https://dream11.com/your-ref-link)")
+        st.markdown(f"[Dream11 / MyTeam11 →]({links.get('dream11', '#')})")
         if st.button("Join Fantasy", key="fantasy"):
             st.toast("🔗 Opening fantasy platform (demo)")
 
     with col3:
         st.markdown("**📺 Watch Every Match Live**")
         st.markdown("Exclusive streaming for Indian viewers")
-        st.markdown("[Zee5 / Unite8 Sports →](https://zee5.com)")
+        st.markdown(f"[Zee5 / Unite8 Sports →]({links.get('zee5', '#')})")
         if st.button("Watch Live", key="watch"):
             st.toast("🔗 Opening streaming partner (demo)")
 
-    st.caption("💡 *Replace the links above with your real affiliate / referral tags*")
+    st.caption("💡 Edit links in the expander above • Replace with your real affiliate tags in production")
 
     st.divider()
 
-    # --- Community Prediction Contest (Core Monetization Feature) ---
+    # --- Community Prediction Contest + Integration ---
     st.markdown("### 🏆 Weekly Prediction Contest")
     st.markdown(
-        "Submit your predictions and climb the leaderboard. Top performers get shoutouts, "
-        "early access to advanced ML insights, and partner rewards!"
+        "Submit predictions, climb the leaderboard, and earn points redeemable for rewards. "
+        "Top entries can unlock partner perks and early access to better models."
     )
 
-    # Display current leaderboard
+    # Personal stats
+    user_entries = [e for e in st.session_state.leaderboard if e["user"] == "You (Demo)"]
+    user_points = user_entries[0]["points"] if user_entries else 0
+    user_rank = next((i+1 for i, e in enumerate(st.session_state.leaderboard) if e["user"] == "You (Demo)"), None)
+
+    p1, p2, p3 = st.columns(3)
+    p1.metric("Your Points", user_points)
+    p2.metric("Your Rank", f"#{user_rank}" if user_rank else "Not ranked yet")
+    p3.metric("Your Submissions", len(st.session_state.my_predictions))
+
+    # Import from ML Predictions tab (new integration)
+    if st.session_state.last_ml_prediction:
+        last = st.session_state.last_ml_prediction
+        if st.button(
+            f"📥 Import Last ML Prediction ({last['team1']} vs {last['team2']})",
+            key="import_ml",
+        ):
+            st.session_state["imported_pred"] = last
+            st.success(
+                f"Imported: {last['team1']} {last['recommended_score'][0]}-{last['recommended_score'][1]} {last['team2']} "
+                f"(win prob {last['win_prob']*100:.0f}%)"
+            )
+            st.rerun()
+    else:
+        st.caption("Make a prediction in the 🔮 ML Predictions tab to import it here automatically.")
+
+    # Leaderboard display
     if st.session_state.leaderboard:
         lb_df = pd.DataFrame(st.session_state.leaderboard)
         lb_df.insert(0, "Rank", range(1, len(lb_df) + 1))
@@ -348,28 +457,42 @@ with tabs[3]:  # Monetize tab
             use_container_width=True,
             hide_index=True,
             column_config={
-                "points": st.column_config.ProgressColumn(
-                    "Points", min_value=0, max_value=1500
-                ),
+                "points": st.column_config.ProgressColumn("Points", min_value=0, max_value=1500),
             },
         )
 
-    st.markdown("**Submit a prediction to the contest**")
+    st.markdown("**Submit / Update your contest prediction**")
 
-    # Team selection for submission
-    available_teams = sorted(
-        pd.unique(pd.concat([fixtures["team1"], fixtures["team2"]])).tolist()
-    ) if not fixtures.empty else ["Argentina", "France", "Brazil", "Germany", "Spain"]
+    # Team selection
+    available_teams = (
+        sorted(pd.unique(pd.concat([fixtures["team1"], fixtures["team2"]])).tolist())
+        if not fixtures.empty
+        else ["Argentina", "France", "Brazil", "Germany", "Spain"]
+    )
 
     sub_col1, sub_col2 = st.columns(2)
     with sub_col1:
         pred_team1 = st.selectbox("Team 1", available_teams, index=0, key="mon_t1")
     with sub_col2:
         remaining = [t for t in available_teams if t != pred_team1]
-        pred_team2 = st.selectbox("Team 2", remaining, index=0, key="mon_t2")
+        default_idx = 0
+        if "imported_pred" in st.session_state:
+            imp = st.session_state["imported_pred"]
+            if imp["team1"] == pred_team1 and imp["team2"] in remaining:
+                default_idx = remaining.index(imp["team2"])
+        pred_team2 = st.selectbox("Team 2", remaining, index=default_idx, key="mon_t2")
 
-    # ML-powered recommendation
-    if st.button("🤖 Get ML Recommendation", key="get_ml_rec"):
+    # Auto-fill from imported or get new ML rec
+    imported = st.session_state.get("imported_pred")
+    use_imported = False
+    if imported and imported["team1"] == pred_team1 and imported["team2"] == pred_team2:
+        use_imported = True
+        default_s1, default_s2 = imported["recommended_score"]
+    else:
+        default_s1, default_s2 = 1, 1
+
+    # ML button
+    if st.button("🤖 Get Fresh ML Recommendation", key="get_ml_rec"):
         ml_pred = get_match_prediction(pred_team1, pred_team2)
         st.session_state[f"ml_rec_{pred_team1}_{pred_team2}"] = ml_pred
         st.success(
@@ -378,17 +501,17 @@ with tabs[3]:  # Monetize tab
             f"(Win prob: {ml_pred['team1_win_prob']*100:.0f}%)"
         )
 
-    # Score input
     rec = st.session_state.get(f"ml_rec_{pred_team1}_{pred_team2}", {})
-    default_s1, default_s2 = rec.get("recommended_score", (1, 1))
+    if use_imported and not rec:
+        rec = {"recommended_score": (default_s1, default_s2)}
 
-    s1 = st.slider(f"{pred_team1} goals", 0, 5, default_s1, key=f"s1_{pred_team1}")
-    s2 = st.slider(f"{pred_team2} goals", 0, 5, default_s2, key=f"s2_{pred_team2}")
+    s1 = st.slider(f"{pred_team1} goals", 0, 5, rec.get("recommended_score", (default_s1, default_s2))[0], key=f"s1_{pred_team1}")
+    s2 = st.slider(f"{pred_team2} goals", 0, 5, rec.get("recommended_score", (default_s1, default_s2))[1], key=f"s2_{pred_team2}")
 
-    if st.button("🚀 Submit Prediction to Leaderboard", type="primary", key="submit_pred"):
-        points = 50 + abs(3 - abs(s1 - s2)) * 15   # simple gamified scoring
-        if rec:
-            points += 30  # bonus for using ML guidance
+    if st.button("🚀 Submit / Update Prediction", type="primary", key="submit_pred"):
+        points = 50 + abs(3 - abs(s1 - s2)) * 15
+        if rec or use_imported:
+            points += 30  # ML bonus
 
         entry = {
             "user": "You (Demo)",
@@ -396,60 +519,113 @@ with tabs[3]:  # Monetize tab
             "prediction": f"{pred_team1} {s1}-{s2} {pred_team2}",
         }
 
-        # Remove old "You" entry if exists, then add new one
         st.session_state.leaderboard = [
             e for e in st.session_state.leaderboard if e["user"] != "You (Demo)"
         ]
         st.session_state.leaderboard.append(entry)
-
-        # Sort by points descending
         st.session_state.leaderboard.sort(key=lambda x: x["points"], reverse=True)
-
-        # Keep top 10
         st.session_state.leaderboard = st.session_state.leaderboard[:10]
 
-        st.session_state.my_predictions.append(entry["prediction"])
+        if entry["prediction"] not in st.session_state.my_predictions:
+            st.session_state.my_predictions.append(entry["prediction"])
 
-        st.success(f"✅ Prediction submitted! You earned **{points} points**.")
+        persist_montization_data()
+
+        st.success(f"✅ Submitted! Earned **{points} points**. Leaderboard & CSV updated.")
         st.balloons()
         st.rerun()
 
-    st.caption("Higher points for bold & accurate calls. Using the ML recommendation gives bonus points.")
+    st.caption("💡 Using ML recommendation or imported prediction = bonus points. Data is persisted to CSV in /data.")
 
+    # --- Rewards / Claim System (new Phase 2 feature) ---
     st.divider()
+    st.markdown("### 🎁 Rewards Shop (Redeem Your Points)")
 
-    # --- Newsletter / Lead Generation (Improved) ---
+    REWARDS = [
+        {"name": "🏆 Contest Shoutout", "cost": 120, "desc": "Get featured in the next weekly recap"},
+        {"name": "📊 Advanced Stats Access", "cost": 250, "desc": "Early peek at model confidence intervals"},
+        {"name": "🛍️ 15% Merch Discount Code", "cost": 380, "desc": "One-time code for Amazon affiliate store"},
+        {"name": "🎟️ Fantasy Entry Credit", "cost": 450, "desc": "₹50 equivalent credit on partner platform"},
+        {"name": "🌟 Premium Model Beta", "cost": 650, "desc": "Access to next version of the ML predictor"},
+    ]
+
+    for reward in REWARDS:
+        col_r1, col_r2 = st.columns([3, 1])
+        with col_r1:
+            st.markdown(f"**{reward['name']}** — {reward['cost']} pts")
+            st.caption(reward["desc"])
+        with col_r2:
+            already_claimed = reward["name"] in st.session_state.claimed_rewards
+            if already_claimed:
+                st.success("Claimed ✓")
+            elif user_points >= reward["cost"]:
+                if st.button(f"Claim ({reward['cost']} pts)", key=f"claim_{reward['name']}"):
+                    st.session_state.claimed_rewards.append(reward["name"])
+                    # Optional: deduct points from user's entry
+                    for e in st.session_state.leaderboard:
+                        if e["user"] == "You (Demo)":
+                            e["points"] -= reward["cost"]
+                            break
+                    persist_montization_data()
+                    st.success(f"Redeemed: {reward['name']}")
+                    st.rerun()
+            else:
+                st.button(f"Need {reward['cost'] - user_points} more", disabled=True, key=f"need_{reward['name']}")
+
+    if st.session_state.claimed_rewards:
+        st.markdown("**Your claimed rewards:** " + " • ".join(st.session_state.claimed_rewards))
+
+    # --- Newsletter / Lead Gen ---
+    st.divider()
     with st.expander("📬 Get Daily WC Tips, Analysis & Contest Updates (Free)", expanded=True):
-        email = st.text_input(
-            "Your email address",
-            placeholder="fan@example.com",
-            key="newsletter_email",
-        )
-        consent = st.checkbox("I want exclusive contest alerts & partner offers", value=True)
-
+        email = st.text_input("Your email address", placeholder="fan@example.com", key="newsletter_email")
         if st.button("Join Free Community", key="join_newsletter", type="primary"):
             if email and "@" in email:
                 if email not in st.session_state.subscribers:
                     st.session_state.subscribers.append(email)
-                st.success(f"🎉 Welcome aboard! We'll send tips & contest updates to {email}.")
-                st.toast("Email added to subscriber list (demo)")
+                    persist_montization_data()
+                st.success(f"🎉 Welcome! Tips & contest alerts will be sent to {email}.")
             else:
-                st.warning("Please enter a valid email address.")
+                st.warning("Please enter a valid email.")
 
         if st.session_state.subscribers:
-            st.markdown("**Recent community members:**")
-            st.write(", ".join(st.session_state.subscribers[-5:]))
-            st.caption(f"Total subscribers: **{len(st.session_state.subscribers)}**")
+            st.write("**Recent members:** " + ", ".join(st.session_state.subscribers[-5:]))
+            st.caption(f"Total: **{len(st.session_state.subscribers)}** subscribers")
 
-    # --- Educational / Business note ---
+    # --- My History + Admin Tools ---
+    with st.expander("📋 My Submissions & Demo Controls"):
+        if st.session_state.my_predictions:
+            st.write("Your recent predictions:")
+            for p in st.session_state.my_predictions[-6:][::-1]:
+                st.write(f"• {p}")
+        else:
+            st.caption("No submissions yet.")
+
+        if st.button("🗑️ Reset All Demo Data (Leaderboard, Subscribers, Rewards)"):
+            st.session_state.leaderboard = load_leaderboard()  # reset to defaults
+            st.session_state.subscribers = []
+            st.session_state.my_predictions = []
+            st.session_state.claimed_rewards = []
+            st.session_state.last_ml_prediction = None
+            if "imported_pred" in st.session_state:
+                del st.session_state["imported_pred"]
+            # Delete persisted files
+            for f in [LEADERBOARD_FILE, SUBSCRIBERS_FILE]:
+                if f.exists():
+                    f.unlink()
+            st.success("Demo data reset.")
+            st.rerun()
+
+    # --- Educational note ---
     st.markdown(
         """
     ---
-    **Why this matters (for builders & students):**
-    - Affiliate + referral links are the easiest way to monetize free tools.
-    - Prediction contests + leaderboards dramatically increase engagement and time-on-site.
-    - Email capture turns one-time visitors into a repeatable audience you can monetize later (sponsors, premium features, merch drops).
-    - All of this is built with pure Streamlit + session_state (no backend required for the demo).
+    **Teaching notes (Monetization & Engagement patterns):**
+    - Configurable links + session_state make the demo easy to customize live.
+    - Cross-tab state (`last_ml_prediction`) shows how to connect features without a database.
+    - CSV persistence demonstrates simple “local database” pattern for prototypes.
+    - Gamified points + redeemable rewards = higher retention (classic freemium tactic).
+    - Email capture + contest = two powerful levers for future monetization (sponsors, premium tier, merch).
     """
     )
 
