@@ -1,0 +1,32 @@
+name: Deploy WC India Hub to Streamlit Cloud / Docker
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Lint with pylint (optional)
+        run: |
+          pip install pylint
+          pylint wc_india_hub.py || echo "Linting completed with warnings"
+      
+      - name: Build Docker image (for self-hosting)
+        run: docker build -t wc-india-hub-2026 .
