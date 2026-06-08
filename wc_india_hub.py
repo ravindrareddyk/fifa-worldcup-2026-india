@@ -68,7 +68,7 @@ col_title, col_time = st.columns([3, 1])
 with col_title:
     st.title("🏆 FIFA World Cup 2026 — India Hub")
     st.markdown(
-        "**Live Schedule • ML Predictions • Simulated Live Scores** | "
+        "**Live Schedule • ML Predictions • Live Scores • Fan Support** | "
         "Built for Indian fans by IT Faculty"
     )
 with col_time:
@@ -82,6 +82,24 @@ fixtures = load_fixtures()
 team_df = load_team_strength()
 
 # -----------------------------------------------------------------------------
+# Session State for Monetization Features (Phase 2)
+# -----------------------------------------------------------------------------
+if "subscribers" not in st.session_state:
+    st.session_state.subscribers = []
+
+if "leaderboard" not in st.session_state:
+    st.session_state.leaderboard = [
+        {"user": "Rohit_93", "points": 1240, "prediction": "France 2-1"},
+        {"user": "PriyaWC", "points": 1185, "prediction": "Argentina 1-1"},
+        {"user": "Amit_11", "points": 1090, "prediction": "Brazil 3-0"},
+        {"user": "SanaK", "points": 1025, "prediction": "Germany 2-2"},
+        {"user": "Vikram88", "points": 980, "prediction": "Spain 2-0"},
+    ]
+
+if "my_predictions" not in st.session_state:
+    st.session_state.my_predictions = []
+
+# -----------------------------------------------------------------------------
 # Main Tabs
 # -----------------------------------------------------------------------------
 tabs = st.tabs(
@@ -89,6 +107,7 @@ tabs = st.tabs(
         "📅 Schedule (IST)",
         "🔴 Live Scores",
         "🔮 ML Predictions",
+        "💰 Support & Monetize",
         "📊 Analytics",
         "🧑‍🏫 For Students & Faculty",
     ]
@@ -263,9 +282,181 @@ with tabs[2]:
         st.success(f"Model retrained! Validation accuracy ≈ {acc}")
 
 # =============================================================================
-# TAB 3: Analytics
+# TAB 3: Support & Monetize (Phase 2)
 # =============================================================================
-with tabs[3]:
+with tabs[3]:  # Monetize tab
+    st.subheader("💰 Support the Hub & Earn Rewards")
+    st.markdown(
+        """
+    **Thank you for using WC India Hub!**  
+    Help keep this free for Indian fans & unlock exclusive rewards.
+    """
+    )
+
+    # --- Impact Metrics ---
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total Supporters", "1,284", "+47 today")
+    m2.metric("Affiliate Revenue (Demo)", "₹4,280", "This month")
+    m3.metric("Predictions Shared", "3,912", "for contests")
+    m4.metric("Active Contestants", str(len(st.session_state.leaderboard)), "this week")
+
+    st.divider()
+
+    # --- Affiliate / Partner Cards ---
+    st.markdown("### 🛒 Partner Offers & Ways to Support")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("**🛍️ Shop Official Fan Gear**")
+        st.markdown("Jerseys, flags, scarves & more")
+        st.markdown("[Amazon India →](https://amzn.to/your-affiliate-tag)")
+        if st.button("Browse Merch", key="merch"):
+            st.toast("🔗 Opening Amazon affiliate link (demo)")
+
+    with col2:
+        st.markdown("**🎯 Fantasy Leagues & Contests**")
+        st.markdown("Play & win big with your WC knowledge")
+        st.markdown("[Dream11 / MyTeam11 →](https://dream11.com/your-ref-link)")
+        if st.button("Join Fantasy", key="fantasy"):
+            st.toast("🔗 Opening fantasy platform (demo)")
+
+    with col3:
+        st.markdown("**📺 Watch Every Match Live**")
+        st.markdown("Exclusive streaming for Indian viewers")
+        st.markdown("[Zee5 / Unite8 Sports →](https://zee5.com)")
+        if st.button("Watch Live", key="watch"):
+            st.toast("🔗 Opening streaming partner (demo)")
+
+    st.caption("💡 *Replace the links above with your real affiliate / referral tags*")
+
+    st.divider()
+
+    # --- Community Prediction Contest (Core Monetization Feature) ---
+    st.markdown("### 🏆 Weekly Prediction Contest")
+    st.markdown(
+        "Submit your predictions and climb the leaderboard. Top performers get shoutouts, "
+        "early access to advanced ML insights, and partner rewards!"
+    )
+
+    # Display current leaderboard
+    if st.session_state.leaderboard:
+        lb_df = pd.DataFrame(st.session_state.leaderboard)
+        lb_df.insert(0, "Rank", range(1, len(lb_df) + 1))
+        st.dataframe(
+            lb_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "points": st.column_config.ProgressColumn(
+                    "Points", min_value=0, max_value=1500
+                ),
+            },
+        )
+
+    st.markdown("**Submit a prediction to the contest**")
+
+    # Team selection for submission
+    available_teams = sorted(
+        pd.unique(pd.concat([fixtures["team1"], fixtures["team2"]])).tolist()
+    ) if not fixtures.empty else ["Argentina", "France", "Brazil", "Germany", "Spain"]
+
+    sub_col1, sub_col2 = st.columns(2)
+    with sub_col1:
+        pred_team1 = st.selectbox("Team 1", available_teams, index=0, key="mon_t1")
+    with sub_col2:
+        remaining = [t for t in available_teams if t != pred_team1]
+        pred_team2 = st.selectbox("Team 2", remaining, index=0, key="mon_t2")
+
+    # ML-powered recommendation
+    if st.button("🤖 Get ML Recommendation", key="get_ml_rec"):
+        ml_pred = get_match_prediction(pred_team1, pred_team2)
+        st.session_state[f"ml_rec_{pred_team1}_{pred_team2}"] = ml_pred
+        st.success(
+            f"ML suggests **{pred_team1} {ml_pred['recommended_score'][0]} - "
+            f"{ml_pred['recommended_score'][1]} {pred_team2}** "
+            f"(Win prob: {ml_pred['team1_win_prob']*100:.0f}%)"
+        )
+
+    # Score input
+    rec = st.session_state.get(f"ml_rec_{pred_team1}_{pred_team2}", {})
+    default_s1, default_s2 = rec.get("recommended_score", (1, 1))
+
+    s1 = st.slider(f"{pred_team1} goals", 0, 5, default_s1, key=f"s1_{pred_team1}")
+    s2 = st.slider(f"{pred_team2} goals", 0, 5, default_s2, key=f"s2_{pred_team2}")
+
+    if st.button("🚀 Submit Prediction to Leaderboard", type="primary", key="submit_pred"):
+        points = 50 + abs(3 - abs(s1 - s2)) * 15   # simple gamified scoring
+        if rec:
+            points += 30  # bonus for using ML guidance
+
+        entry = {
+            "user": "You (Demo)",
+            "points": points,
+            "prediction": f"{pred_team1} {s1}-{s2} {pred_team2}",
+        }
+
+        # Remove old "You" entry if exists, then add new one
+        st.session_state.leaderboard = [
+            e for e in st.session_state.leaderboard if e["user"] != "You (Demo)"
+        ]
+        st.session_state.leaderboard.append(entry)
+
+        # Sort by points descending
+        st.session_state.leaderboard.sort(key=lambda x: x["points"], reverse=True)
+
+        # Keep top 10
+        st.session_state.leaderboard = st.session_state.leaderboard[:10]
+
+        st.session_state.my_predictions.append(entry["prediction"])
+
+        st.success(f"✅ Prediction submitted! You earned **{points} points**.")
+        st.balloons()
+        st.rerun()
+
+    st.caption("Higher points for bold & accurate calls. Using the ML recommendation gives bonus points.")
+
+    st.divider()
+
+    # --- Newsletter / Lead Generation (Improved) ---
+    with st.expander("📬 Get Daily WC Tips, Analysis & Contest Updates (Free)", expanded=True):
+        email = st.text_input(
+            "Your email address",
+            placeholder="fan@example.com",
+            key="newsletter_email",
+        )
+        consent = st.checkbox("I want exclusive contest alerts & partner offers", value=True)
+
+        if st.button("Join Free Community", key="join_newsletter", type="primary"):
+            if email and "@" in email:
+                if email not in st.session_state.subscribers:
+                    st.session_state.subscribers.append(email)
+                st.success(f"🎉 Welcome aboard! We'll send tips & contest updates to {email}.")
+                st.toast("Email added to subscriber list (demo)")
+            else:
+                st.warning("Please enter a valid email address.")
+
+        if st.session_state.subscribers:
+            st.markdown("**Recent community members:**")
+            st.write(", ".join(st.session_state.subscribers[-5:]))
+            st.caption(f"Total subscribers: **{len(st.session_state.subscribers)}**")
+
+    # --- Educational / Business note ---
+    st.markdown(
+        """
+    ---
+    **Why this matters (for builders & students):**
+    - Affiliate + referral links are the easiest way to monetize free tools.
+    - Prediction contests + leaderboards dramatically increase engagement and time-on-site.
+    - Email capture turns one-time visitors into a repeatable audience you can monetize later (sponsors, premium features, merch drops).
+    - All of this is built with pure Streamlit + session_state (no backend required for the demo).
+    """
+    )
+
+# =============================================================================
+# TAB 4: Analytics
+# =============================================================================
+with tabs[4]:
     st.subheader("📊 Tournament Analytics")
 
     if not fixtures.empty:
@@ -294,9 +485,9 @@ with tabs[3]:
         st.info("Analytics will appear once real fixtures are loaded.")
 
 # =============================================================================
-# TAB 4: For Students & Faculty (Teaching tab)
+# TAB 5: For Students & Faculty (Teaching tab)
 # =============================================================================
-with tabs[4]:
+with tabs[5]:
     st.subheader("🧑‍🏫 Educational Lab — Perfect for Teaching DevOps + ML + Web Apps")
 
     st.markdown("""
