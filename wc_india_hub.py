@@ -280,8 +280,12 @@ with tabs[0]:
         if round_filter != "All":
             view = view[view["round"] == round_filter]
 
+        # Show IST date for Indian audience (first match Mexico vs South Africa appears as 12 June in IST)
+        display_cols = ["ist_date", "ist_time", "team1", "team2", "group", "round", "venue"]
+        if "ist_date" not in view.columns:
+            display_cols = ["date", "ist_time", "team1", "team2", "group", "round", "venue"]
         st.dataframe(
-            view[["date", "ist_time", "team1", "team2", "group", "round", "venue"]],
+            view[display_cols],
             use_container_width=True,
             height=520,
             hide_index=True,
@@ -290,8 +294,9 @@ with tabs[0]:
             f"Source: openfootball/worldcup.json (2026) • {len(view)} matches shown"
         )
 
-        # Professional export feature
-        csv_schedule = view[["date", "ist_time", "team1", "team2", "group", "round", "venue"]].to_csv(index=False).encode("utf-8")
+        # Professional export feature (use IST date where available)
+        export_cols = ["ist_date", "ist_time", "team1", "team2", "group", "round", "venue"] if "ist_date" in view.columns else ["date", "ist_time", "team1", "team2", "group", "round", "venue"]
+        csv_schedule = view[export_cols].to_csv(index=False).encode("utf-8")
         st.download_button(
             label="⬇️ Download Schedule (CSV)",
             data=csv_schedule,

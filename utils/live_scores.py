@@ -21,23 +21,29 @@ def _get_mock_live_matches() -> list[dict]:
     """
     # Curated list of real early Group Stage matches from the official 2026 schedule
     # (sourced from FIFA official schedule and draw - June 11-14 2026 window)
+    # Added approximate IST times for Indian fans (times can shift slightly)
     realistic_early_matches = [
-        {"team1": "Mexico", "team2": "South Africa", "group": "A", "venue": "Mexico City Stadium"},
-        {"team1": "South Korea", "team2": "Czechia", "group": "A", "venue": "Guadalajara Stadium"},
-        {"team1": "Canada", "team2": "Bosnia and Herzegovina", "group": "B", "venue": "BMO Field, Toronto"},
-        {"team1": "Qatar", "team2": "Switzerland", "group": "B", "venue": "Levi's Stadium"},
-        {"team1": "Brazil", "team2": "Morocco", "group": "C", "venue": "MetLife Stadium, NY/NJ"},
-        {"team1": "Haiti", "team2": "Scotland", "group": "C", "venue": "Hard Rock Stadium, Miami"},
-        {"team1": "United States", "team2": "Paraguay", "group": "D", "venue": "SoFi Stadium, Los Angeles"},
-        {"team1": "Australia", "team2": "Türkiye", "group": "D", "venue": "AT&T Stadium, Dallas"},
+        {"team1": "Mexico", "team2": "South Africa", "group": "A", "venue": "Mexico City Stadium", "ist_time": "12 Jun, 06:30 AM IST"},
+        {"team1": "South Korea", "team2": "Czechia", "group": "A", "venue": "Guadalajara Stadium", "ist_time": "12 Jun, 01:30 PM IST"},
+        {"team1": "Canada", "team2": "Bosnia and Herzegovina", "group": "B", "venue": "BMO Field, Toronto", "ist_time": "12 Jun, 10:30 PM IST"},
+        {"team1": "Qatar", "team2": "Switzerland", "group": "B", "venue": "Levi's Stadium", "ist_time": "13 Jun, 08:30 AM IST"},
+        {"team1": "Brazil", "team2": "Morocco", "group": "C", "venue": "MetLife Stadium, NY/NJ", "ist_time": "14 Jun, 08:30 AM IST"},
+        {"team1": "Haiti", "team2": "Scotland", "group": "C", "venue": "Hard Rock Stadium, Miami", "ist_time": "14 Jun, 11:30 AM IST"},
+        {"team1": "United States", "team2": "Paraguay", "group": "D", "venue": "SoFi Stadium, Los Angeles", "ist_time": "13 Jun, 11:30 AM IST"},
+        {"team1": "Australia", "team2": "Türkiye", "group": "D", "venue": "AT&T Stadium, Dallas", "ist_time": "14 Jun, 03:30 PM IST"},
     ]
 
     # More realistic status options for group stage openers
     statuses = ["LIVE 23'", "LIVE 41'", "LIVE 58'", "HT", "LIVE 72'", "LIVE 81'", "FT", "LIVE 12'"]
 
     live = []
-    for match_info in realistic_early_matches:
-        status = random.choice(statuses)
+    for i, match_info in enumerate(realistic_early_matches):
+        # Make status more realistic for the actual schedule
+        # First match (Mexico opener) should not be "HT" or "FT" if it's the very first game
+        if i == 0:
+            status = random.choice(["LIVE 12'", "LIVE 23'", "LIVE 35'"])
+        else:
+            status = random.choice(statuses)
 
         # Better goal simulation (low scoring for openers + home/co-host bias)
         home_teams = ["Mexico", "Canada", "United States", "Brazil"]
@@ -59,7 +65,7 @@ def _get_mock_live_matches() -> list[dict]:
                 "score": f"{g1} - {g2}",
                 "status": status,
                 "venue": match_info["venue"],
-                "ist_time": "TBD (see Schedule tab)",  # Will be improved with real datetime later
+                "ist_time": match_info.get("ist_time", "TBD (see Schedule tab)"),
                 "minute": (
                     int(status.replace("LIVE ", "").replace("'", ""))
                     if "LIVE" in status

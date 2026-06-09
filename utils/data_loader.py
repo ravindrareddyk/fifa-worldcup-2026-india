@@ -58,6 +58,14 @@ def load_fixtures() -> pd.DataFrame:
                 else "TBD"
             )
         )
+        # IST date for better display to Indian fans (accounts for time zone crossing)
+        df["ist_date"] = df["datetime_utc"].apply(
+            lambda x: (
+                x.tz_localize("UTC").tz_convert("Asia/Kolkata").date()
+                if pd.notna(x)
+                else None
+            )
+        )
         df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
         return df
 
@@ -157,6 +165,13 @@ def _fallback_fixtures() -> pd.DataFrame:
         .dt.tz_localize("UTC")
         .dt.tz_convert("Asia/Kolkata")
         .dt.strftime("%d %b, %I:%M %p IST")
+    )
+    # Compute IST date for Indian audience (first match 11 June local = 12 June IST)
+    df["ist_date"] = (
+        df["datetime_utc"]
+        .dt.tz_localize("UTC")
+        .dt.tz_convert("Asia/Kolkata")
+        .dt.date
     )
     df["date"] = pd.to_datetime(df["date"]).dt.date
     return df
