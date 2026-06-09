@@ -30,7 +30,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff black pytest
+          pip install ruff black pytest pytest-cov coverage pip-audit bandit
 
       - name: Ruff linting (strict)
         run: ruff check . --output-format=github
@@ -38,9 +38,18 @@ jobs:
       - name: Black format check
         run: black --check .
 
-      - name: Run tests
+      - name: Security: pip-audit (dependency vulnerabilities)
         run: |
-          python -m pytest tests/ -q --tb=short || echo "Tests completed (add more in future)"
+          pip-audit --desc || echo "pip-audit completed (review any findings)"
+
+      - name: Security: bandit (Python code scan)
+        run: |
+          bandit -r . -ll --exclude "tests/,notebooks/" || echo "bandit scan completed"
+
+      - name: Run tests with coverage
+        run: |
+          python -m pytest tests/ -q --tb=short --cov=utils --cov=wc_india_hub --cov-report=term-missing || echo "Tests completed (coverage may be partial in early runs)"
+          python -m coverage report --fail-under=50 || true  # Non-blocking for now, raise later
 
   # ---------------------------------------------------------------------------
   # 2. Train ML model (MLOps flavor - runs in CI)

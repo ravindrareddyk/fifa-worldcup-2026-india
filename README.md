@@ -18,8 +18,10 @@ Live IST Schedule • ML-Powered Predictions • Simulated Live Scores • Built
 - **🔴 Live Scores (Simulated)** — Beautiful demo mode with one-click goal simulation. Real football API integration stub ready (`FOOTBALL_API_KEY`)
 - **🔮 ML Predictions** — Beginner-friendly **RandomForest** model that outputs win/draw probabilities + expected score. Feature importance explained in the UI.
 - **📊 Rich Analytics** — Interactive Plotly charts for groups, team strength, distributions
-- **🧑‍🏫 Teaching-First Design** — Clean `utils/` package, documented code, MLOps & DevOps patterns students can actually extend
-- **🚀 Production-Grade DevOps** — Non-root Docker, healthchecks, GitHub Actions with GHCR publishing, model training in CI
+- **🧑‍🏫 Teaching-First Design** — Clean `utils/` package, Pydantic models, structured logging, SQLite example, documented code, MLOps & DevOps patterns students can actually extend
+- **🚀 Production-Grade DevOps** — Non-root Docker, healthchecks, GitHub Actions with GHCR publishing, model training in CI, security scanning, Dependabot
+- **🛡️ Robustness** — Structured logging, Pydantic validation, SQLite persistence for contest data, centralized config with pydantic-settings, improved error handling
+- **📤 Professional Features** — CSV exports for schedule & leaderboard, model versioning/metadata display, configurable affiliate links, full rewards/engagement system in monetization tab
 
 ---
 

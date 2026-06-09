@@ -5,7 +5,10 @@ Model is trained on synthetic + historical data and persisted with joblib.
 """
 
 # ruff: noqa: E402  (warnings filter must run before importing sklearn / heavy libs)
+import json
+import logging
 import warnings
+from datetime import datetime
 
 warnings.filterwarnings("ignore")
 
@@ -19,7 +22,10 @@ from sklearn.model_selection import train_test_split
 
 from .data_loader import load_team_strength, load_historical_matches
 
+logger = logging.getLogger(__name__)
+
 MODEL_PATH = Path(__file__).parent.parent / "data" / "wc2026_model.joblib"
+MODEL_METADATA_PATH = MODEL_PATH.with_suffix(".json")
 DATA_DIR = Path(__file__).parent.parent / "data"
 
 
@@ -106,6 +112,20 @@ def train_and_save_model() -> tuple[RandomForestClassifier, float]:
 
     acc = accuracy_score(y_test, model.predict(X_test))
     joblib.dump(model, MODEL_PATH)
+
+    # Save simple model metadata (versioning for professionalism)
+    metadata = {
+        "version": "v1.0",
+        "trained_at": datetime.utcnow().isoformat() + "Z",
+        "accuracy": round(acc, 4),
+        "n_estimators": 120,
+        "features": ["team1_str", "team2_str", "str_diff", "is_knockout", "neutral_venue"],
+        "training_rows": len(X_train),
+    }
+    with open(MODEL_METADATA_PATH, "w") as f:
+        json.dump(metadata, f, indent=2)
+
+    logger.info(f"ML model trained and saved. Validation accuracy: {acc}")
     return model, round(acc, 3)
 
 
@@ -117,6 +137,21 @@ def load_model() -> RandomForestClassifier:
     return model
 
 
+def get_model_metadata() -> dict:
+    """Return model versioning metadata (for UI display)."""
+    if MODEL_METADATA_PATH.exists():
+        try:
+            with open(MODEL_METADATA_PATH) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {
+        "version": "unknown",
+        "trained_at": "N/A",
+        "accuracy": "N/A",
+    }
+
+
 def get_match_prediction(team1: str, team2: str, is_knockout: bool = False) -> dict:
     """
     Return beginner-friendly prediction for a match.
@@ -124,6 +159,7 @@ def get_match_prediction(team1: str, team2: str, is_knockout: bool = False) -> d
     """
     model = load_model()
     strength = _get_strength_dict()
+    logger.debug(f"Generating prediction for {team1} vs {team2}")
 
     row = pd.DataFrame(
         [

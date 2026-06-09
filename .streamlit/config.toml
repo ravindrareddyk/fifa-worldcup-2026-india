@@ -1,0 +1,23 @@
+[theme]
+# Professional, clean theme suitable for a sports/education dashboard
+base = "light"
+primaryColor = "#1E3A8A"          # Deep blue (professional)
+backgroundColor = "#F8FAFC"
+secondaryBackgroundColor = "#E0F2FE"
+textColor = "#0F172A"
+font = "sans serif"
+
+[server]
+# Production-friendly defaults (overridden by Docker CMD / cloud platforms)
+headless = true
+port = 8501
+enableCORS = false
+enableXsrfProtection = true
+
+[browser]
+# Reduce unnecessary telemetry in demos
+gatherUsageStats = false
+
+[runner]
+# Faster development feedback
+fastReruns = true

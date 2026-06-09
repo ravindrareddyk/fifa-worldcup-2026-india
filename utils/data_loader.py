@@ -2,11 +2,14 @@
 Data loading utilities for fixtures, team strength, and historical data.
 All paths are relative to project root.
 """
+import logging
 
 import pandas as pd
 import requests
 import streamlit as st
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 FIXTURES_URL = "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json"
@@ -59,7 +62,8 @@ def load_fixtures() -> pd.DataFrame:
         return df
 
     except Exception as e:
-        st.warning(f"Live fixtures fetch failed ({e}). Using bundled fallback data.")
+        logger.error(f"Live fixtures fetch failed: {e}. Using bundled fallback data.")
+        st.warning("Live fixtures fetch failed. Using bundled fallback data.")
         return _fallback_fixtures()
 
 

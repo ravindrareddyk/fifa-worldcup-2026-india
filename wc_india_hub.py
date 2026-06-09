@@ -17,12 +17,30 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 from pathlib import Path
+import logging
+
+# -----------------------------------------------------------------------------
+# Structured Logging Setup (Professional Robustness)
+# -----------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+    handlers=[logging.StreamHandler()],
+)
+logger = logging.getLogger("wc_india_hub")
 
 # Internal modules
 from utils.data_loader import load_fixtures, load_team_strength
-from utils.ml_model import get_match_prediction, train_and_save_model
+from utils.ml_model import get_match_prediction, train_and_save_model, get_model_metadata
 from utils.live_scores import get_live_matches, simulate_live_update
 from utils.ist_utils import get_current_ist
+from utils.models import ContestSubmission, LeaderboardEntry
+from utils.config import config, get_config
+
+logger.info("WC India Hub 2026 starting up...")
+logger.info(f"Config loaded | env={config.env} | debug={config.debug} | log_level={config.log_level}")
+# Reconfigure level if different (after config load)
+logging.getLogger().setLevel(getattr(logging, config.log_level.upper(), logging.INFO))
 
 # -----------------------------------------------------------------------------
 # Page config & styling
@@ -34,13 +52,23 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Custom CSS for polish
+# Custom CSS for polish (works alongside .streamlit/config.toml theme)
 st.markdown(
     """
 <style>
     .main .block-container { padding-top: 1.2rem; }
-    .stMetric { background-color: #0f172a; border-radius: 8px; padding: 8px; }
+    .stMetric { 
+        background-color: #f1f5f9; 
+        border-radius: 10px; 
+        padding: 10px; 
+        border: 1px solid #e2e8f0;
+    }
     .big-prob { font-size: 1.6rem; font-weight: 700; }
+    /* Professional card-like containers */
+    .stContainer {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+    }
 </style>
 """,
     unsafe_allow_html=True,
@@ -59,6 +87,7 @@ st.sidebar.caption("Built by Indian IT Faculty\nas a teaching + portfolio projec
 with st.sidebar.expander("⚙️ DevOps & ML Status"):
     st.caption("✅ Docker + GitHub Actions (GHCR)")
     st.caption("✅ scikit-learn RandomForest model")
+    st.caption("✅ Structured logging enabled")
     st.caption("✅ Live score simulator (demo mode)")
     st.caption("🔑 Add FOOTBALL_API_KEY for real API")
 
@@ -81,46 +110,114 @@ with col_time:
 # -----------------------------------------------------------------------------
 fixtures = load_fixtures()
 team_df = load_team_strength()
+logger.info(f"Data loaded: {len(fixtures)} fixtures, {len(team_df)} teams. Pydantic models enabled for validation.")
 
 # -----------------------------------------------------------------------------
-# Session State + Persistence for Monetization Features (Phase 2)
+# Session State + SQLite Persistence for Monetization Features (Phase 2 - Robust)
+# More professional than CSV: proper schema, transactions, queries.
 # -----------------------------------------------------------------------------
+import sqlite3
+
 DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 
-LEADERBOARD_FILE = DATA_DIR / "leaderboard.csv"
-SUBSCRIBERS_FILE = DATA_DIR / "subscribers.csv"
+CONTEST_DB = DATA_DIR / "contest.db"
+
+
+def _get_db_connection():
+    conn = sqlite3.connect(CONTEST_DB)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _init_db():
+    """Initialize SQLite schema if not exists."""
+    with _get_db_connection() as conn:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS leaderboard (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user TEXT NOT NULL,
+                points INTEGER NOT NULL CHECK (points >= 0),
+                prediction TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS subscribers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT UNIQUE NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+
+_init_db()
+
 
 def load_leaderboard():
-    if LEADERBOARD_FILE.exists():
-        try:
-            df = pd.read_csv(LEADERBOARD_FILE)
-            return df.to_dict("records")
-        except Exception:
-            pass
-    # Default demo data
-    return [
+    try:
+        with _get_db_connection() as conn:
+            rows = conn.execute(
+                f"SELECT user, points, prediction FROM leaderboard ORDER BY points DESC LIMIT {config.max_leaderboard_entries}"
+            ).fetchall()
+            if rows:
+                return [dict(row) for row in rows]
+    except Exception as e:
+        logger.error(f"Failed to load leaderboard from SQLite: {e}")
+
+    # Default demo data (seeded once)
+    defaults = [
         {"user": "Rohit_93", "points": 1240, "prediction": "France 2-1"},
         {"user": "PriyaWC", "points": 1185, "prediction": "Argentina 1-1"},
         {"user": "Amit_11", "points": 1090, "prediction": "Brazil 3-0"},
         {"user": "SanaK", "points": 1025, "prediction": "Germany 2-2"},
         {"user": "Vikram88", "points": 980, "prediction": "Spain 2-0"},
     ]
+    try:
+        with _get_db_connection() as conn:
+            conn.executemany(
+                "INSERT OR IGNORE INTO leaderboard (user, points, prediction) VALUES (?, ?, ?)",
+                [(d["user"], d["points"], d["prediction"]) for d in defaults],
+            )
+    except Exception as e:
+        logger.error(f"Failed to seed default leaderboard: {e}")
+    return defaults
+
 
 def save_leaderboard(data):
-    pd.DataFrame(data).to_csv(LEADERBOARD_FILE, index=False)
+    """Replace current 'You (Demo)' entries and insert new top ones."""
+    try:
+        with _get_db_connection() as conn:
+            conn.execute("DELETE FROM leaderboard WHERE user = ?", ("You (Demo)",))
+            for entry in data[:10]:
+                conn.execute(
+                    "INSERT INTO leaderboard (user, points, prediction) VALUES (?, ?, ?)",
+                    (entry["user"], entry["points"], entry["prediction"]),
+                )
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Failed to save leaderboard to SQLite: {e}")
+
 
 def load_subscribers():
-    if SUBSCRIBERS_FILE.exists():
-        try:
-            df = pd.read_csv(SUBSCRIBERS_FILE)
-            return df["email"].tolist()
-        except Exception:
-            pass
+    try:
+        with _get_db_connection() as conn:
+            rows = conn.execute("SELECT email FROM subscribers ORDER BY created_at DESC").fetchall()
+            return [row["email"] for row in rows]
+    except Exception as e:
+        logger.error(f"Failed to load subscribers from SQLite: {e}")
     return []
 
+
 def save_subscribers(emails):
-    pd.DataFrame({"email": emails}).to_csv(SUBSCRIBERS_FILE, index=False)
+    try:
+        with _get_db_connection() as conn:
+            for email in emails:
+                conn.execute(
+                    "INSERT OR IGNORE INTO subscribers (email) VALUES (?)", (email,)
+                )
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Failed to save subscribers to SQLite: {e}")
+
 
 if "subscribers" not in st.session_state:
     st.session_state.subscribers = load_subscribers()
@@ -137,8 +234,10 @@ if "claimed_rewards" not in st.session_state:
 if "last_ml_prediction" not in st.session_state:
     st.session_state.last_ml_prediction = None
 
-# Auto-save helpers (call after mutations)
-def persist_montization_data():
+
+# Auto-persist helper (call after mutations in monetization)
+def persist_monetization_data():
+    """Persist current in-memory state to SQLite (robust replacement for CSV)."""
     save_leaderboard(st.session_state.leaderboard)
     save_subscribers(st.session_state.subscribers)
 
@@ -189,6 +288,16 @@ with tabs[0]:
         )
         st.caption(
             f"Source: openfootball/worldcup.json (2026) • {len(view)} matches shown"
+        )
+
+        # Professional export feature
+        csv_schedule = view[["date", "ist_time", "team1", "team2", "group", "round", "venue"]].to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="⬇️ Download Schedule (CSV)",
+            data=csv_schedule,
+            file_name="wc2026_schedule.csv",
+            mime="text/csv",
+            key="download_schedule",
         )
     else:
         st.info("Fixtures will be available closer to the tournament (June 2026).")
@@ -327,9 +436,18 @@ with tabs[2]:
         "Model is retrained automatically on first run or via `python -m utils.train_model`. See `data/historical_matches.csv` and `utils/ml_model.py`."
     )
 
+    # Model versioning display (professional touch)
+    meta = get_model_metadata()
+    st.caption(
+        f"**Model Version**: {meta.get('version', 'N/A')} | "
+        f"Trained: {meta.get('trained_at', 'N/A')[:19]} | "
+        f"Accuracy: {meta.get('accuracy', 'N/A')}"
+    )
+
     if st.button("🔁 Retrain Model Now (demo)"):
         with st.spinner("Retraining RandomForest..."):
             model, acc = train_and_save_model()
+        logger.info(f"Model retrained via UI. Accuracy: {acc}")
         st.success(f"Model retrained! Validation accuracy ≈ {acc}")
 
 # =============================================================================
@@ -461,6 +579,16 @@ with tabs[3]:  # Monetize tab
             },
         )
 
+        # Professional export feature
+        csv = lb_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="⬇️ Download Leaderboard (CSV)",
+            data=csv,
+            file_name="wc2026_leaderboard.csv",
+            mime="text/csv",
+            key="download_leaderboard",
+        )
+
     st.markdown("**Submit / Update your contest prediction**")
 
     # Team selection
@@ -513,29 +641,39 @@ with tabs[3]:  # Monetize tab
         if rec or use_imported:
             points += 30  # ML bonus
 
-        entry = {
-            "user": "You (Demo)",
-            "points": points,
-            "prediction": f"{pred_team1} {s1}-{s2} {pred_team2}",
-        }
+        # Use Pydantic for validation (robustness)
+        try:
+            submission = ContestSubmission(
+                team1=pred_team1,
+                team2=pred_team2,
+                score1=s1,
+                score2=s2,
+                points_earned=points,
+            )
+            entry: LeaderboardEntry = submission.to_leaderboard_entry()
+        except Exception as e:
+            logger.error(f"Invalid submission: {e}")
+            st.error(f"Invalid prediction data: {e}")
+            st.stop()
 
         st.session_state.leaderboard = [
             e for e in st.session_state.leaderboard if e["user"] != "You (Demo)"
         ]
-        st.session_state.leaderboard.append(entry)
+        st.session_state.leaderboard.append(entry.model_dump())
         st.session_state.leaderboard.sort(key=lambda x: x["points"], reverse=True)
-        st.session_state.leaderboard = st.session_state.leaderboard[:10]
+        st.session_state.leaderboard = st.session_state.leaderboard[: config.max_leaderboard_entries]
 
-        if entry["prediction"] not in st.session_state.my_predictions:
-            st.session_state.my_predictions.append(entry["prediction"])
+        if entry.prediction not in st.session_state.my_predictions:
+            st.session_state.my_predictions.append(entry.prediction)
 
-        persist_montization_data()
+        persist_monetization_data()
 
-        st.success(f"✅ Submitted! Earned **{points} points**. Leaderboard & CSV updated.")
+        logger.info(f"User submitted prediction: {entry.prediction} for {points} points")
+        st.success(f"✅ Submitted! Earned **{points} points**. Leaderboard updated (SQLite).")
         st.balloons()
         st.rerun()
 
-    st.caption("💡 Using ML recommendation or imported prediction = bonus points. Data is persisted to CSV in /data.")
+    st.caption("💡 Using ML recommendation or imported prediction = bonus points. Data persisted to SQLite (data/contest.db) for robustness.")
 
     # --- Rewards / Claim System (new Phase 2 feature) ---
     st.divider()
@@ -566,7 +704,7 @@ with tabs[3]:  # Monetize tab
                         if e["user"] == "You (Demo)":
                             e["points"] -= reward["cost"]
                             break
-                    persist_montization_data()
+                    persist_monetization_data()
                     st.success(f"Redeemed: {reward['name']}")
                     st.rerun()
             else:
@@ -583,7 +721,8 @@ with tabs[3]:  # Monetize tab
             if email and "@" in email:
                 if email not in st.session_state.subscribers:
                     st.session_state.subscribers.append(email)
-                    persist_montization_data()
+                    persist_monetization_data()
+                logger.info(f"New subscriber added: {email}")
                 st.success(f"🎉 Welcome! Tips & contest alerts will be sent to {email}.")
             else:
                 st.warning("Please enter a valid email.")
@@ -609,11 +748,15 @@ with tabs[3]:  # Monetize tab
             st.session_state.last_ml_prediction = None
             if "imported_pred" in st.session_state:
                 del st.session_state["imported_pred"]
-            # Delete persisted files
-            for f in [LEADERBOARD_FILE, SUBSCRIBERS_FILE]:
-                if f.exists():
-                    f.unlink()
-            st.success("Demo data reset.")
+            # Clear SQLite tables (robust reset)
+            try:
+                with _get_db_connection() as conn:
+                    conn.execute("DELETE FROM leaderboard")
+                    conn.execute("DELETE FROM subscribers")
+                    conn.commit()
+            except Exception as e:
+                logger.error(f"Failed to reset SQLite contest DB: {e}")
+            st.success("Demo data reset (SQLite + session).")
             st.rerun()
 
     # --- Educational note ---
@@ -623,7 +766,7 @@ with tabs[3]:  # Monetize tab
     **Teaching notes (Monetization & Engagement patterns):**
     - Configurable links + session_state make the demo easy to customize live.
     - Cross-tab state (`last_ml_prediction`) shows how to connect features without a database.
-    - CSV persistence demonstrates simple “local database” pattern for prototypes.
+    - SQLite persistence (replacing earlier CSV) demonstrates a more robust “local database” pattern with schema and transactions.
     - Gamified points + redeemable rewards = higher retention (classic freemium tactic).
     - Email capture + contest = two powerful levers for future monetization (sponsors, premium tier, merch).
     """

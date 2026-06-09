@@ -5,10 +5,13 @@ Live score handling with two modes:
 
 This teaches students graceful degradation and environment-based config.
 """
-
+import logging
 import random
 import os
+
 from .data_loader import load_fixtures
+
+logger = logging.getLogger(__name__)
 
 
 def _get_mock_live_matches() -> list[dict]:
@@ -59,6 +62,7 @@ def get_live_matches(use_real_api: bool = False) -> list[dict]:
         try:
             return _fetch_from_football_api(api_key)
         except Exception as e:
+            logger.error(f"Real live scores API failed: {e}")
             return [
                 {
                     "match": "API Error",
