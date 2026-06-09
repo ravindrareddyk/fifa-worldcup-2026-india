@@ -308,7 +308,7 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("🔴 Live Scores & Match Status")
     st.caption(
-        "Currently in **demo / simulation mode**. Real API integration ready (see utils/live_scores.py)."
+        "Currently in **demo / simulation mode** using accurate 2026 WC groups & early schedule (from official FIFA draw). Real API integration ready (see utils/live_scores.py)."
     )
 
     # Session state for "live" simulation
@@ -337,10 +337,12 @@ with tabs[1]:
     # Display as nice cards
     for match in live_data:
         status_color = "🟢" if match.get("is_live") else "⚪"
+        group = match.get("group", "")
+        group_label = f" | Group {group}" if group else ""
         with st.container(border=True):
             c1, c2, c3 = st.columns([3, 1.5, 1])
             with c1:
-                st.markdown(f"**{match['match']}**")
+                st.markdown(f"**{match['match']}**{group_label}")
                 st.caption(f"{match.get('venue', 'TBD')} • {match.get('ist_time', '')}")
             with c2:
                 st.markdown(
@@ -353,6 +355,37 @@ with tabs[1]:
     st.info(
         "💡 **Teaching note**: This is a classic pattern — graceful fallback + simulation for demos + real integration behind a feature flag."
     )
+
+    # --- Group Tables & Overview (added for better accuracy) ---
+    st.subheader("📊 Group Overview (Mock Standings based on real 2026 groups)")
+
+    groups_overview = {
+        "A": ["Mexico", "South Africa", "South Korea", "Czechia"],
+        "B": ["Canada", "Bosnia and Herzegovina", "Qatar", "Switzerland"],
+        "C": ["Brazil", "Morocco", "Haiti", "Scotland"],
+        "D": ["United States", "Paraguay", "Australia", "Türkiye"],
+    }
+
+    cols = st.columns(2)
+    for idx, (group, teams) in enumerate(groups_overview.items()):
+        with cols[idx % 2]:
+            st.markdown(f"**Group {group}**")
+            # Simple mock standings (P W D L GF GA GD Pts)
+            standings = []
+            for i, team in enumerate(teams):
+                # Fake some results for demo
+                p, w, d, l = 1, 1 if i == 0 else 0, 0, 0 if i == 0 else 1
+                gf, ga = (2 if i == 0 else 0), (0 if i == 0 else 1)
+                pts = 3 if i == 0 else 0
+                standings.append([team, p, w, d, l, gf, ga, gf-ga, pts])
+
+            stand_df = pd.DataFrame(
+                standings,
+                columns=["Team", "P", "W", "D", "L", "GF", "GA", "GD", "Pts"],
+            )
+            st.dataframe(stand_df, use_container_width=True, hide_index=True)
+
+    st.caption("Standings are illustrative/mock for demo purposes. Real groups from official 2026 draw.")
 
 # =============================================================================
 # TAB 2: ML Predictions (Real model!)

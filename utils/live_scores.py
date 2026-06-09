@@ -15,36 +15,58 @@ logger = logging.getLogger(__name__)
 
 
 def _get_mock_live_matches() -> list[dict]:
-    """Generate plausible in-progress or just-finished matches for demo."""
-    base_fixtures = load_fixtures().head(8)
-    statuses = ["LIVE 23'", "LIVE 41'", "LIVE 67'", "HT", "LIVE 81'", "FT", "LIVE 12'"]
-    live = []
+    """Generate plausible in-progress or just-finished matches for demo.
+    Uses accurate 2026 WC groups and early schedule (researched from official FIFA sources)
+    for realistic data instead of random outdated fixtures.
+    """
+    # Curated list of real early Group Stage matches from the official 2026 schedule
+    # (sourced from FIFA official schedule and draw - June 11-14 2026 window)
+    realistic_early_matches = [
+        {"team1": "Mexico", "team2": "South Africa", "group": "A", "venue": "Mexico City Stadium"},
+        {"team1": "South Korea", "team2": "Czechia", "group": "A", "venue": "Guadalajara Stadium"},
+        {"team1": "Canada", "team2": "Bosnia and Herzegovina", "group": "B", "venue": "BMO Field, Toronto"},
+        {"team1": "Qatar", "team2": "Switzerland", "group": "B", "venue": "Levi's Stadium"},
+        {"team1": "Brazil", "team2": "Morocco", "group": "C", "venue": "MetLife Stadium, NY/NJ"},
+        {"team1": "Haiti", "team2": "Scotland", "group": "C", "venue": "Hard Rock Stadium, Miami"},
+        {"team1": "United States", "team2": "Paraguay", "group": "D", "venue": "SoFi Stadium, Los Angeles"},
+        {"team1": "Australia", "team2": "Türkiye", "group": "D", "venue": "AT&T Stadium, Dallas"},
+    ]
 
-    for _, row in base_fixtures.iterrows():
+    # More realistic status options for group stage openers
+    statuses = ["LIVE 23'", "LIVE 41'", "LIVE 58'", "HT", "LIVE 72'", "LIVE 81'", "FT", "LIVE 12'"]
+
+    live = []
+    for match_info in realistic_early_matches:
         status = random.choice(statuses)
-        # Simulate some goals
-        g1 = random.choice([0, 0, 1, 1, 1, 2])
-        g2 = (
-            random.choice([0, 0, 0, 1, 1, 2])
-            if status not in ["LIVE 12'"]
-            else random.choice([0, 0, 1])
-        )
+
+        # Better goal simulation (low scoring for openers + home/co-host bias)
+        home_teams = ["Mexico", "Canada", "United States", "Brazil"]
+        if match_info["team1"] in home_teams:
+            g1 = random.choice([1, 1, 2, 2, 3])
+            g2 = random.choice([0, 0, 1, 1, 2])
+        else:
+            g1 = random.choice([0, 0, 1, 1, 1, 2])
+            g2 = random.choice([0, 0, 1, 1, 2])
+
+        if random.random() < 0.35:  # occasional away result
+            g1, g2 = g2, g1
 
         live.append(
             {
-                "match": f"{row['team1']} vs {row['team2']}",
-                "team1": row["team1"],
-                "team2": row["team2"],
+                "match": f"{match_info['team1']} vs {match_info['team2']}",
+                "team1": match_info["team1"],
+                "team2": match_info["team2"],
                 "score": f"{g1} - {g2}",
                 "status": status,
-                "venue": row.get("venue", "TBD"),
-                "ist_time": row.get("ist_time", "TBD"),
+                "venue": match_info["venue"],
+                "ist_time": "TBD (see Schedule tab)",  # Will be improved with real datetime later
                 "minute": (
                     int(status.replace("LIVE ", "").replace("'", ""))
                     if "LIVE" in status
                     else None
                 ),
                 "is_live": "LIVE" in status,
+                "group": match_info["group"],
             }
         )
     return live

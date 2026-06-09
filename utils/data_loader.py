@@ -68,52 +68,86 @@ def load_fixtures() -> pd.DataFrame:
 
 
 def _fallback_fixtures() -> pd.DataFrame:
-    """Minimal fallback so the app is always usable offline."""
+    """Minimal fallback so the app is always usable offline.
+    Updated with accurate 2026 World Cup 48-team groups and early match schedule
+    (based on official FIFA draw and published schedule).
+    """
     data = [
+        # Group A opening matches
         {
             "date": "2026-06-11",
-            "time_utc": "18:00",
+            "time_utc": "20:00",
             "team1": "Mexico",
-            "team2": "Argentina",
+            "team2": "South Africa",
             "group": "A",
             "round": "Group Stage",
-            "venue": "Mexico City",
+            "venue": "Mexico City Stadium",
         },
         {
             "date": "2026-06-12",
-            "time_utc": "15:00",
-            "team1": "USA",
-            "team2": "Brazil",
+            "time_utc": "03:00",
+            "team1": "South Korea",
+            "team2": "Czechia",
+            "group": "A",
+            "round": "Group Stage",
+            "venue": "Guadalajara Stadium",
+        },
+        # Group B
+        {
+            "date": "2026-06-12",
+            "time_utc": "20:00",
+            "team1": "Canada",
+            "team2": "Bosnia and Herzegovina",
             "group": "B",
             "round": "Group Stage",
-            "venue": "New York",
+            "venue": "BMO Field, Toronto",
         },
         {
             "date": "2026-06-13",
-            "time_utc": "19:00",
-            "team1": "France",
-            "team2": "Germany",
+            "time_utc": "20:00",
+            "team1": "Qatar",
+            "team2": "Switzerland",
+            "group": "B",
+            "round": "Group Stage",
+            "venue": "Levi's Stadium, Santa Clara",
+        },
+        # Group C
+        {
+            "date": "2026-06-13",
+            "time_utc": "23:00",
+            "team1": "Brazil",
+            "team2": "Morocco",
             "group": "C",
             "round": "Group Stage",
-            "venue": "Toronto",
+            "venue": "MetLife Stadium, New York/New Jersey",
         },
         {
             "date": "2026-06-14",
-            "time_utc": "17:00",
-            "team1": "England",
-            "team2": "Spain",
+            "time_utc": "02:00",
+            "team1": "Haiti",
+            "team2": "Scotland",
+            "group": "C",
+            "round": "Group Stage",
+            "venue": "Hard Rock Stadium, Miami",
+        },
+        # Group D - USA opening
+        {
+            "date": "2026-06-13",
+            "time_utc": "02:00",
+            "team1": "United States",
+            "team2": "Paraguay",
             "group": "D",
             "round": "Group Stage",
-            "venue": "Dallas",
+            "venue": "SoFi Stadium, Los Angeles",
         },
         {
-            "date": "2026-06-15",
-            "time_utc": "20:00",
-            "team1": "Portugal",
-            "team2": "Netherlands",
-            "group": "E",
+            "date": "2026-06-14",
+            "time_utc": "05:00",
+            "team1": "Australia",
+            "team2": "Türkiye",
+            "group": "D",
             "round": "Group Stage",
-            "venue": "Atlanta",
+            "venue": "AT&T Stadium, Dallas",
         },
     ]
     df = pd.DataFrame(data)
