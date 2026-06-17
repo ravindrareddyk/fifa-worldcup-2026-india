@@ -11,6 +11,6 @@ pydantic-settings>=2.0
 ruff>=0.4
 black>=24.0
 pytest>=8.0
-pytest-cov>=4.1
+pytest-cov>=7.1.0
 # Optional for future live API
 # python-football-api>=0.1
